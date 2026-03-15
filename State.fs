@@ -2,6 +2,7 @@ module Interpreter.State
 
 open Result
 open Language
+open Interpreter.Memory
 
 let reservedVariableName (v: string) : bool =
     List.exists
@@ -25,25 +26,54 @@ let validVariableName (v: string) : bool =
     else
         false
 
-type state = { variables: Map<string, int> }
+type state =
+    { variables : Map<string, int>
+      memory    : memory }
 
-let mkState () : state = { variables = Map.empty }
+let mkState (memSize : int) : state =
+    { variables = Map.empty
+      memory    = empty memSize }
 
 let declare (x: string) (st: state) : state option =
     match Map.containsKey x st.variables with
     | true -> None
     | false ->
         if validVariableName x && not (reservedVariableName x) then
-            Some { variables = Map.add x 0 st.variables }
+            let newVars = Map.add x 0 st.variables
+            Some { st with variables = newVars }
         else
             None
 
-let getVar (x: string) (st: state) : int option = Map.tryFind x st.variables
+let getVar (x: string) (st: state) : int option =
+    Map.tryFind x st.variables
 
 let setVar (x: string) (v: int) (st: state) : state option =
     match Map.containsKey x st.variables with
-    | true -> Some { variables = Map.add x v st.variables }
-    | false -> None
+    | true ->
+        let newVars = Map.add x v st.variables
+        Some { st with variables = newVars }
+    | false ->
+        None
 
-let push _ = failwith "not implemented"
-let pop _ = failwith "not implemented"
+let alloc (x : string) (size : int) (st : state) : state option =
+    match Interpreter.Memory.alloc size st.memory with
+    | None ->
+        None
+    | Some (mem', ptr) ->
+        match setVar x ptr st with
+        | None -> None
+        | Some stWithVar ->
+            Some { stWithVar with memory = mem' }
+
+let free (ptr : int) (size : int) (st : state) : state option =
+    match Interpreter.Memory.free ptr size st.memory with
+    | None -> None
+    | Some mem' -> Some { st with memory = mem' }
+
+let getMem (ptr : int) (st : state) : int option =
+    Interpreter.Memory.getMem ptr st.memory
+
+let setMem (ptr : int) (value : int) (st : state) : state option =
+    match Interpreter.Memory.setMem ptr value st.memory with
+    | None -> None
+    | Some mem' -> Some { st with memory = mem' }
